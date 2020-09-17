@@ -76,26 +76,87 @@ for iD=1:nSess
     trial_TargetAssigned = assignTaskNumber(Pos_Seq_1_unique,Pos_Seq_1);
 end
 
+%% Pre processing
+p2s = 'E:/aolab/data/centerOut_ECOG/figures';   % Path to save
+
+ECOG_chanidx = 100; % Define ECOG channel to look at
+SC32_chanidx = 240; % Define SC32 channel to look at
+
+wc = 5; % Cut off frequency [hz]
+bw_order = 4;   % Butterworth filter order
+
+% Check if ECOG or SC32 channel to look at is a bad channel
+if ~isempty(trialInfo.badE(trialInfo.badE == ECOG_chanidx))
+    error('Pick a different ECOG channel, this is a bad channel');
+elseif ~isempty(trialInfo.badE(trialInfo.badE == SC32_chanidx))
+    error('Pick a different SC32 channel, this is a bad channel');
+end
+
+% FFT plot x axis
+freq_delta = 1/size(trLfpData, 3)*trialInfo.Fs_lfp;
+freq_axis = 0:freq_delta:trialInfo.Fs_lfp-1;
+
+% Trial average
+lfpavg = squeeze(mean(trLfpData, 1));
+
+% 5 Hz Low pass 4th order butterworth filter
+lfpfilt = zeros(size(lfpavg));  % Initialize array
+[blfp, alfp] = butter(4,wc/(trialInfo.Fs_lfp/2), 'low'); % Create Filter
+% Apply LPF on good data
+for ii = trialInfo.goodE
+    lfpfilt(ii,:) = filtfilt(blfp, alfp, lfpavg(ii,:));
+end
+
+% Plot
+figure; hold on;
+plot(lfpfilt(ECOG_chanidx, :), 'LineWidth', 1); plot(lfpavg(ECOG_chanidx,:), 'LineWidth', 1);
+legend('5Hz Filtered', 'ECoG');
+xlim([0 600]);
+title('Single Channel ECoG', 'FontSize', 16); 
+xlabel('Time', 'FontSize', 14); ylabel('[mV]', 'FontSize', 14);
+saveas(gcf, [p2s '/singleChan_ECoG.png']);
+
+figure; hold on; 
+plot(freq_axis, abs(fft(lfpfilt(ECOG_chanidx, :))), 'LineWidth', 1); plot(freq_axis, abs(fft(lfpavg(ECOG_chanidx, :))), 'LineWidth', 1);
+legend('5Hz Filtered', 'ECoG');
+xlim([0 100]);
+xlabel('Frequency [Hz]', 'FontSize', 14); 
+title('Single Channel ECoG FFT', 'FontSize', 16);
+saveas(gcf, [p2s '/singleChan_ECoG_fft.png']);
+
+figure; hold on;
+plot(lfpfilt(SC32_chanidx, :), 'LineWidth', 1); plot(lfpavg(SC32_chanidx,:), 'LineWidth', 1);
+legend('5Hz Filtered', 'SC32');
+xlim([0 600]);
+title('Single Channel ECoG', 'FontSize', 16); 
+xlabel('Time', 'FontSize', 14); ylabel('[mV]', 'FontSize', 14);
+saveas(gcf, [p2s '/singleChan_SC32.png']);
+
+figure; hold on; 
+plot(freq_axis, abs(fft(lfpfilt(SC32_chanidx, :))), 'LineWidth', 1); plot(freq_axis, abs(fft(lfpavg(SC32_chanidx, :))), 'LineWidth', 1);
+legend('5Hz Filtered', 'SC32');
+xlim([0 100]);
+xlabel('Frequency [Hz]', 'FontSize', 14); 
+title('Single Channel ECoG FFT', 'FontSize', 16);
+saveas(gcf, [p2s '/singleChan_SC32_fft.png']);
 %% PCA
 
-% Within Trial (2D)
-trialID = 1;    % Trial to analyze
-lfpdat2D = squeeze(trLfpData(trialID, :,:));
-
-% Trial Averaging
-lfpdat = squeeze(mean(trLfpData, 1));
+% Z-score
+lfpfiltz = zscore(lfpfilt, 0, 'all');
 
 % Perform PCA
-[ECOG_pca.coeff, ECOG_pca.score, ECOG_pca.latent, ECOG_pca.tsquared, ECOG_pca.explained, ECOG_pca.mu] = pca(lfpdat(trialInfo.ECOG_indices, :));
-[SC32_pca.coeff, SC32_pca.score, SC32_pca.latent, SC32_pca.tsquared, SC32_pca.explained, SC32_pca.mu] = pca(lfpdat(trialInfo.SC32_indices, :));
+[ECOG_pca.coeff, ECOG_pca.score, ECOG_pca.latent, ECOG_pca.tsquared, ECOG_pca.explained, ECOG_pca.mu] = pca(lfpfiltz(trialInfo.ECOG_indices, :));
+[SC32_pca.coeff, SC32_pca.score, SC32_pca.latent, SC32_pca.tsquared, SC32_pca.explained, SC32_pca.mu] = pca(lfpfiltz(trialInfo.SC32_indices, :));
 
 % Plot ECoG data projected onto the first 2 principal components
 figure; hold on;
 plot(ECOG_pca.score(:,1), ECOG_pca.score(:,2), 'k.', 'MarkerSize', 10);
 line([0 ECOG_pca.latent(1)], [0 0], 'color', 'red', 'LineStyle', '--');
 hold off;
-xlabel('1'); ylabel('2'); xlim([-600 400]); ylim([-250 250]);
-title('ECoG - 2')
+xlabel('1', 'FontSize', 14); ylabel('2', 'FontSize', 14); 
+xlim([-30 30]); ylim([-15 15]);
+title('ECoG - 2 PC', 'FontSize', 16)
+saveas(gcf, [p2s '/ECoG_PCA2.png']);
 
 % Plot ECoG data projected onto the first 3 principal components
 figure; hold on;
@@ -103,17 +164,27 @@ plot3(ECOG_pca.score(:,1),ECOG_pca.score(:,2),ECOG_pca.score(:,3), 'k.', 'Marker
 line([0 ECOG_pca.latent(1)], [0 0], [0,0], 'color', 'red', 'LineStyle', '--');
 line([0 0], [0 ECOG_pca.latent(2)], [0,0], 'color', 'red', 'LineStyle', '--');
 hold off;
-xlabel('1'); ylabel('2'); zlabel('3'); xlim([-600 400]); ylim([-250 250]); zlim([-200 300]);
-title('ECoG - 3');
+xlabel('1', 'FontSize', 14); ylabel('2', 'FontSize', 14); zlabel('3', 'FontSize', 14); 
+xlim([-30 30]); ylim([-15 15]); zlim([-20 30]);
+title('ECoG - 3 PC', 'FontSize', 16);
+saveas(gcf, [p2s '/ECoG_PCA3.png']);
 
-% Plot ECoG data projected onto the first 2 principal components
+% Plot ECoG variance distribution across latent dimensions
+figure; 
+plot(cumsum(ECOG_pca.explained), 'k', 'LineWidth', 1);
+ylim([50 100]); ylabel('Cumulative Variance Explained [%]', 'FontSize', 14)
+xlim([1 15]); xlabel('Latent Dimension Number', 'FontSize', 14);
+saveas(gcf, [p2s '/ECoG_PCA_cumvar.png']);
+
+% Plot SC32 data projected onto the first 2 principal components
 figure; hold on;
 plot(SC32_pca.score(:,1), SC32_pca.score(:,2), 'k.', 'MarkerSize', 10);
 line([0 SC32_pca.latent(1)], [0 0], 'color', 'red', 'LineStyle', '--');
 hold off;
-xlabel('1'); ylabel('2'); 
-xlim([-2000 2000]); ylim([-2000 2000]);
-title('SC32 - 2')
+xlabel('1', 'FontSize', 14); ylabel('2', 'FontSize', 14); 
+xlim([-140 50]); ylim([-50 60]);
+title('SC32 - 2 PC', 'FontSize', 16)
+saveas(gcf, [p2s '/SC32_PCA2.png']);
 
 % Plot SC32 data projected onto the first 3 principal components
 figure; hold on;
@@ -121,25 +192,40 @@ plot3(SC32_pca.score(:,1),SC32_pca.score(:,2),SC32_pca.score(:,3), 'k.', 'Marker
 line([0 SC32_pca.latent(1)], [0 0], [0,0], 'color', 'red', 'LineStyle', '--');
 line([0 0], [0 SC32_pca.latent(2)], [0,0], 'color', 'red', 'LineStyle', '--');
 hold off;
-xlabel('1'); ylabel('2'); zlabel('3'); 
-xlim([-2000 2000]); ylim([-2000 2000]); zlim([-2000 2000]);
-title('SC32 - 3');
+xlabel('1', 'FontSize', 14); ylabel('2', 'FontSize', 14); zlabel('3', 'FontSize', 14); 
+xlim([-140 50]); ylim([-50 60]); zlim([-50 50]);
+title('SC32 - 3 PC', 'FontSize', 16);
+saveas(gcf, [p2s '/SC32_PCA3.png']);
 
+% Plot SC32 variance distribution across latent dimensions
+figure; 
+plot(cumsum(SC32_pca.explained), 'k', 'LineWidth', 1);
+ylim([50 100]); ylabel('Cumulative Variance Explained [%]', 'FontSize', 14)
+xlim([1 15]); xlabel('Latent Dimension Number', 'FontSize', 14);
+saveas(gcf, [p2s '/SC32_PCA_cumvar.png']);
 %% Factor Analysis
 
 % Remove NaN
-lfpdat_cut = reshape(lfpdat(~isnan(lfpdat)),[], size(lfpdat,2));
+lfpavg_cut = reshape(lfpavg(~isnan(lfpavg)),[], size(lfpavg,2));
 
-% lambda: factor loadings
-% psi: maximum likelihood estimates of the speciifc variances
-% T: mxm factor loadings rotation matrix
-% stats: struct with information relating to the null hypothesis
-[ECOG_FA.lambda, ECOG_FA.psi, ECOG_FA.T, ECOG_FA.stats] = factoran(lfpdat_cut(trialInfo.ECOG_indices(1):trialInfo.ECOG_indices(end)-length(trialInfo.badECoGs), :)', 3);
+% ECOG_FA.lambda:   MLE of factor loadings
+% ECOG_FA.psi:      MLE of specific vaiances
+% ECOG_FA.T:        m x m factor loadings rotation matrix T
+% ECOG_FA.stats:    Struct containing information relating to the null hypothesis
+%   stats.loglike:  Maximized log-likelihood value
+%   stats.dfe:      Error degrees of freedom
+%   stats.chisq:    Approx. chi-squared stat for the null hypothesis
+%   stats.p:        Right tail significance level for the null hypothesis
+[ECOG_FA.lambda, ECOG_FA.psi, ECOG_FA.T, ECOG_FA.stats] = factoran(lfpavg_cut(trialInfo.ECOG_indices(1):trialInfo.ECOG_indices(end)-length(trialInfo.badECoGs), :)', 1);
 
-%% Plot 
+% Plot 
 figure; hold on;
-plot3(ECOG_FA.lambda(:,1), ECOG_FA.lambda(:,2), ECOG_FA.lambda(:,3), 'k.', 'MarkerSize', 10);
-xlabel('1'), ylabel('2'), zlabel('3');
+% line([0 1], [0 0], [0 0], 'color', 'red', 'LineStyle', '--');
+% line([0 0], [0 1], [0 0], 'color', 'red', 'LineStyle', '--');
+% line([0 0], [0 0], [0 1], 'color', 'red', 'LineStyle', '--');
+plot(ECOG_FA.lambda(:,1), ECOG_FA.lambda(:,2), 'k.', 'MarkerSize', 10);
+% plot3(ECOG_FA.lambda(:,1), ECOG_FA.lambda(:,2), ECOG_FA.lambda(:,3), 'k.', 'MarkerSize', 10);
+xlabel('1'), ylabel('2'),% zlabel('3');
 
 
 
