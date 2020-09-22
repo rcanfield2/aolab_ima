@@ -82,7 +82,7 @@ p2s = 'E:/aolab/data/centerOut_ECOG/figures';   % Path to save
 ECOG_chanidx = 100; % Define ECOG channel to look at
 SC32_chanidx = 240; % Define SC32 channel to look at
 
-wc = 5; % Cut off frequency [hz]
+wc = 50; % Cut off frequency [hz]
 bw_order = 4;   % Butterworth filter order
 
 % Check if ECOG or SC32 channel to look at is a bad channel
@@ -92,20 +92,23 @@ elseif ~isempty(trialInfo.badE(trialInfo.badE == SC32_chanidx))
     error('Pick a different SC32 channel, this is a bad channel');
 end
 
-% FFT plot x axis
+% FFT plot x axis parameters
 freq_delta = 1/size(trLfpData, 3)*trialInfo.Fs_lfp;
 freq_axis = 0:freq_delta:trialInfo.Fs_lfp-1;
 
 % Trial average
 lfpavg = squeeze(mean(trLfpData, 1));
 
-% 5 Hz Low pass 4th order butterworth filter
+% Low pass 4th order butterworth filter
 lfpfilt = zeros(size(lfpavg));  % Initialize array
 [blfp, alfp] = butter(4,wc/(trialInfo.Fs_lfp/2), 'low'); % Create Filter
-% Apply LPF on good data
+% Apply LPF on data from good electrodes
 for ii = trialInfo.goodE
     lfpfilt(ii,:) = filtfilt(blfp, alfp, lfpavg(ii,:));
 end
+
+% Include NaN values to mark bad electrodes
+lfpfilt(trialInfo.badE,:) = NaN;
 
 % Plot
 figure; hold on;
@@ -141,72 +144,92 @@ title('Single Channel ECoG FFT', 'FontSize', 16);
 saveas(gcf, [p2s '/singleChan_SC32_fft.png']);
 %% PCA
 
+% Remove NaN values for processing
+ECOG_pca.lfp = lfpfilt(trialInfo.goodECoGs,:);
+SC32_pca.lfp = lfpfilt(trialInfo.goodSC32,:);
+
 % Z-score
-lfpfiltz = zscore(lfpfilt, 0, 'all');
+ECOG_pca.lfpz = zscore(ECOG_pca.lfp, 0, 'all');
+SC32_pca.lfpz = zscore(SC32_pca.lfp, 0, 'all');
 
 % Perform PCA
-[ECOG_pca.coeff, ECOG_pca.score, ECOG_pca.latent, ECOG_pca.tsquared, ECOG_pca.explained, ECOG_pca.mu] = pca(lfpfiltz(trialInfo.ECOG_indices, :));
-[SC32_pca.coeff, SC32_pca.score, SC32_pca.latent, SC32_pca.tsquared, SC32_pca.explained, SC32_pca.mu] = pca(lfpfiltz(trialInfo.SC32_indices, :));
+[ECOG_pca.coeff, ECOG_pca.score, ECOG_pca.latent, ~, ECOG_pca.explained] = pca(ECOG_pca.lfpz);
+
+% Perform SVD
+[ECOG_pca.u, ECOG_pca.s, ECOG_pca.v] = svd(ECOG_pca.lfpz', 'econ');
+[SC32_pca.u, SC32_pca.s, SC32_pca.v] = svd(SC32_pca.lfpz', 'econ');
+
+% Project ECOG data onto first principal components
+ECOG_pca.p1 = diag(ECOG_pca.lfpz*repmat(ECOG_pca.u(:,1), [1, size(ECOG_pca.lfpz, 1)]));
+ECOG_pca.p2 = diag(ECOG_pca.lfpz*repmat(ECOG_pca.u(:,2), [1, size(ECOG_pca.lfpz, 1)]));
+ECOG_pca.p3 = diag(ECOG_pca.lfpz*repmat(ECOG_pca.u(:,3), [1, size(ECOG_pca.lfpz, 1)]));
+
+% Calculate Variance
+ECOG_pca.var = diag(ECOG_pca.s.^2);
+SC32_pca.var = diag(SC32_pca.s.^2);
 
 % Plot ECoG data projected onto the first 2 principal components
 figure; hold on;
-plot(ECOG_pca.score(:,1), ECOG_pca.score(:,2), 'k.', 'MarkerSize', 10);
-line([0 ECOG_pca.latent(1)], [0 0], 'color', 'red', 'LineStyle', '--');
+plot(ECOG_pca.p1, ECOG_pca.p2, 'k.', 'MarkerSize', 10);
+% line([0 ECOG_pca.s(1)], [0 0], 'color', 'red', 'LineStyle', '--');
 hold off;
 xlabel('1', 'FontSize', 14); ylabel('2', 'FontSize', 14); 
-xlim([-30 30]); ylim([-15 15]);
+% xlim([-30 30]); ylim([-15 15]);
 title('ECoG - 2 PC', 'FontSize', 16)
 saveas(gcf, [p2s '/ECoG_PCA2.png']);
 
 % Plot ECoG data projected onto the first 3 principal components
 figure; hold on;
-plot3(ECOG_pca.score(:,1),ECOG_pca.score(:,2),ECOG_pca.score(:,3), 'k.', 'MarkerSize', 10);
-line([0 ECOG_pca.latent(1)], [0 0], [0,0], 'color', 'red', 'LineStyle', '--');
-line([0 0], [0 ECOG_pca.latent(2)], [0,0], 'color', 'red', 'LineStyle', '--');
+plot3(ECOG_pca.p1,ECOG_pca.p2,ECOG_pca.p3, 'k.', 'MarkerSize', 10);
+% line([0 ECOG_pca.s(1)], [0 0], [0,0], 'color', 'red', 'LineStyle', '--');
+% line([0 0], [0 ECOG_pca.s(2)], [0,0], 'color', 'red', 'LineStyle', '--');
 hold off;
 xlabel('1', 'FontSize', 14); ylabel('2', 'FontSize', 14); zlabel('3', 'FontSize', 14); 
-xlim([-30 30]); ylim([-15 15]); zlim([-20 30]);
+% xlim([-30 30]); ylim([-15 15]); zlim([-20 30]);
 title('ECoG - 3 PC', 'FontSize', 16);
 saveas(gcf, [p2s '/ECoG_PCA3.png']);
 
 % Plot ECoG variance distribution across latent dimensions
 figure; 
-plot(cumsum(ECOG_pca.explained), 'k', 'LineWidth', 1);
+plot(100*cumsum(ECOG_pca.var./sum(ECOG_pca.var)), 'k', 'LineWidth', 1);
 ylim([50 100]); ylabel('Cumulative Variance Explained [%]', 'FontSize', 14)
-xlim([1 15]); xlabel('Latent Dimension Number', 'FontSize', 14);
+xlim([1 30]); xlabel('Latent Dimension Number', 'FontSize', 14);
 saveas(gcf, [p2s '/ECoG_PCA_cumvar.png']);
 
-% Plot SC32 data projected onto the first 2 principal components
-figure; hold on;
-plot(SC32_pca.score(:,1), SC32_pca.score(:,2), 'k.', 'MarkerSize', 10);
-line([0 SC32_pca.latent(1)], [0 0], 'color', 'red', 'LineStyle', '--');
-hold off;
-xlabel('1', 'FontSize', 14); ylabel('2', 'FontSize', 14); 
-xlim([-140 50]); ylim([-50 60]);
-title('SC32 - 2 PC', 'FontSize', 16)
-saveas(gcf, [p2s '/SC32_PCA2.png']);
-
-% Plot SC32 data projected onto the first 3 principal components
-figure; hold on;
-plot3(SC32_pca.score(:,1),SC32_pca.score(:,2),SC32_pca.score(:,3), 'k.', 'MarkerSize', 10);
-line([0 SC32_pca.latent(1)], [0 0], [0,0], 'color', 'red', 'LineStyle', '--');
-line([0 0], [0 SC32_pca.latent(2)], [0,0], 'color', 'red', 'LineStyle', '--');
-hold off;
-xlabel('1', 'FontSize', 14); ylabel('2', 'FontSize', 14); zlabel('3', 'FontSize', 14); 
-xlim([-140 50]); ylim([-50 60]); zlim([-50 50]);
-title('SC32 - 3 PC', 'FontSize', 16);
-saveas(gcf, [p2s '/SC32_PCA3.png']);
-
+% % Plot SC32 data projected onto the first 2 principal components
+% figure; hold on;
+% plot(SC32_pca.score(:,1), SC32_pca.score(:,2), 'k.', 'MarkerSize', 10);
+% line([0 SC32_pca.latent(1)], [0 0], 'color', 'red', 'LineStyle', '--');
+% hold off;
+% xlabel('1', 'FontSize', 14); ylabel('2', 'FontSize', 14); 
+% xlim([-140 50]); ylim([-50 60]);
+% title('SC32 - 2 PC', 'FontSize', 16)
+% saveas(gcf, [p2s '/SC32_PCA2.png']);
+% 
+% % Plot SC32 data projected onto the first 3 principal components
+% figure; hold on;
+% plot3(SC32_pca.score(:,1),SC32_pca.score(:,2),SC32_pca.score(:,3), 'k.', 'MarkerSize', 10);
+% line([0 SC32_pca.latent(1)], [0 0], [0,0], 'color', 'red', 'LineStyle', '--');
+% line([0 0], [0 SC32_pca.latent(2)], [0,0], 'color', 'red', 'LineStyle', '--');
+% hold off;
+% xlabel('1', 'FontSize', 14); ylabel('2', 'FontSize', 14); zlabel('3', 'FontSize', 14); 
+% xlim([-140 50]); ylim([-50 60]); zlim([-50 50]);
+% title('SC32 - 3 PC', 'FontSize', 16);
+% saveas(gcf, [p2s '/SC32_PCA3.png']);
+% 
 % Plot SC32 variance distribution across latent dimensions
 figure; 
-plot(cumsum(SC32_pca.explained), 'k', 'LineWidth', 1);
+plot(100*cumsum(SC32_pca.var./sum(SC32_pca.var)), 'k', 'LineWidth', 1);
 ylim([50 100]); ylabel('Cumulative Variance Explained [%]', 'FontSize', 14)
 xlim([1 15]); xlabel('Latent Dimension Number', 'FontSize', 14);
 saveas(gcf, [p2s '/SC32_PCA_cumvar.png']);
 %% Factor Analysis
 
-% Remove NaN
-lfpavg_cut = reshape(lfpavg(~isnan(lfpavg)),[], size(lfpavg,2));
+% Use data with NaN values omitted
+ECOG_FA.lfp = ECOG_pca.lfp;
+ECOG_FA.lfpz = ECOG_pca.lfpz;
+SC32_FA.lfp = SC32_pca.lfp;
+SC32_FA.lfpz = SC32_pca.lfpz;
 
 % ECOG_FA.lambda:   MLE of factor loadings
 % ECOG_FA.psi:      MLE of specific vaiances
@@ -216,7 +239,8 @@ lfpavg_cut = reshape(lfpavg(~isnan(lfpavg)),[], size(lfpavg,2));
 %   stats.dfe:      Error degrees of freedom
 %   stats.chisq:    Approx. chi-squared stat for the null hypothesis
 %   stats.p:        Right tail significance level for the null hypothesis
-[ECOG_FA.lambda, ECOG_FA.psi, ECOG_FA.T, ECOG_FA.stats] = factoran(lfpavg_cut(trialInfo.ECOG_indices(1):trialInfo.ECOG_indices(end)-length(trialInfo.badECoGs), :)', 1);
+rank(ECOG_FA.lfp');
+[ECOG_FA.lambda, ECOG_FA.psi, ECOG_FA.T, ECOG_FA.stats] = factoran(ECOG_FA.lfp', 3);
 
 % Plot 
 figure; hold on;
