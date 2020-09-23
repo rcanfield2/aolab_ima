@@ -1,4 +1,4 @@
-%% Run PCA
+%% Run PCA Basic
 close all;
 clear all;
 clc
@@ -9,13 +9,18 @@ MONKEYDIR = 'E:\aolab\data\centerOut_ECOG';
 plotinfo.showplots = true;  % Should plots be shown
 plotinfo.saveplots = false; % Should plots be saved
 plotinfo.p2s = 'E:/aolab/data/centerOut_ECOG/figures';  % Path to save
-wcECOG = [30 120];    % Butterworth filter frequency cutoff for ECOG data
+wcECOG = [100]; % Butterworth filter frequency cutoff for ECOG data
 wcSC32 = 25;    % Butterworth filter frequency cutoff for SC32 data
 bwOrder = 4;    % Butterwoth filter order
+avgdTrials = 1; % Which trials to average. 
+                    % [trialidx] to look at a specific trial
+                    % [startidx:endidx] to define a range
+                    % 'all' to average all trials. 
 
 %% Analysis 
 % Load Data
 [trLfpData, trialInfo] = IMA_loadData(MONKEYDIR);
+trialInfo.avgdTrials = avgdTrials;
 
 % Preprocess ECOG
 plotinfo.idx = 100;         % Channel index to plot

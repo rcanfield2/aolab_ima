@@ -6,6 +6,7 @@ function [ecogPCA] = IMA_PCA(lfpin, goodE, zscoreParam)
 % Inputs:
 %   lfpin: [ntime, nchannel] - Preprocessed data where each row corresponds
 %       to an observation and each column correspond to a variable.
+%   goodE: [ngoodchannel] - Vector containing the indices of good channels
 %   zscoreParam: [struct] - Parameters used to zscore data
 %
 % Outputs:
