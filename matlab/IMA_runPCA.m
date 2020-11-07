@@ -1,5 +1,5 @@
 %% Run PCA Basic
-close all;
+% close all;
 clear all;
 clc
 
@@ -10,7 +10,7 @@ plotinfo.showplots = true;  % Should plots be shown
 plotinfo.saveplots = false; % Should plots be saved
 plotinfo.p2s = 'E:/aolab/data/centerOut_ECOG/figures';  % Path to save
 wcECOG = [100]; % Butterworth filter frequency cutoff for ECOG data
-wcSC32 = 25;    % Butterworth filter frequency cutoff for SC32 data
+wcSC32 = 100;    % Butterworth filter frequency cutoff for SC32 data
 bwOrder = 4;    % Butterwoth filter order
 avgdTrials = 1; % Which trials to average. 
                     % [trialidx] to look at a specific trial

@@ -33,7 +33,7 @@ plotinfo.ID = 'SC32';       % String ID for preprocessing run
 sc32LfpPrePCA = IMA_preprocess(trLfpData(:,trialInfo.SC32_indices-trialInfo.ECoG_offset,:), trialInfo.badE(4:end)-trialInfo.ECoG_offset, wcSC32, bwOrder, trialInfo, plotinfo);
 
 % Run FA on ECOG
-FAparams.m = 1:20;
+FAparams.m = 1:5;
 for ii = FAparams.m
     ecogFA = IMA_FA(ecogLfpPrePCA', trialInfo.goodECoGs, ii);
     ll(ii) = ecogFA.stats.loglike;
